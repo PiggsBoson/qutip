@@ -64,6 +64,8 @@ def create_pulse_gen(pulse_type='RND', dyn=None, pulse_params=None):
         return PulseGenLinear(dyn, params=pulse_params)
     elif pulse_type == 'ZERO':
         return PulseGenZero(dyn, params=pulse_params)
+    elif pulse_type == 'BANG':
+        return PulseGenBang(dyn, params=pulse_params)
     elif pulse_type == 'SINE':
         return PulseGenSine(dyn, params=pulse_params)
     elif pulse_type == 'SQUARE':
@@ -300,6 +302,18 @@ class PulseGenZero(PulseGen):
         in which case it will be the offset
         """
         pulse = np.zeros(self.num_tslots)
+        return self._apply_bounds_and_offset(pulse)
+
+
+class PulseGenBang(PulseGen):
+    """
+    Generates a bang-bang pulse
+    """
+    def gen_pulse(self):
+        """
+        Generate a pulse with alternate +-1
+        """
+        pulse = np.array([-1**i for i in range(self.num_tslots)])
         return self._apply_bounds_and_offset(pulse)
 
 
