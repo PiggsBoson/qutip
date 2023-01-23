@@ -313,7 +313,7 @@ class PulseGenBang(PulseGen):
         """
         Generate a pulse with alternate +-1
         """
-        pulse = np.array([-1**i for i in range(self.num_tslots)])
+        pulse = np.array([(-1)**i for i in range(self.num_tslots)])
         return self._apply_bounds_and_offset(pulse)
 
 
