@@ -569,7 +569,6 @@ class FidCompUnitaryBipartite(FidelityComputer):
         else:
             sys_dim = dyn._target.shape[0]
             bath_dim = dyn.get_drift_dim()//sys_dim
-            print(dyn.get_drift_dim(),sys_dim ,bath_dim)
             target_expanded = np.kron(dyn._target, np.identity(bath_dim))
             Q_tensor =np.matmul(target_expanded.conjugate().transpose(), evo_final).reshape([sys_dim, bath_dim, sys_dim, bath_dim])
             self.Q = np.trace(Q_tensor, axis1=0, axis2=2)
@@ -579,7 +578,6 @@ class FidCompUnitaryBipartite(FidelityComputer):
         """
         Gets the absolute error in the fidelity
         """
-        print(self.scale_factor)
         if not self.fidelity_current:
             dyn = self.parent
             dyn = self.parent
@@ -606,7 +604,6 @@ class FidCompUnitaryBipartite(FidelityComputer):
             self.fidelity_current = True
             if self.log_level <= logging.DEBUG:
                 logger.debug("Fidelity error: {}".format(self.fid_err))
-        print(self.fid_err)
         return self.fid_err
 
     def get_fid_err_gradient(self):
