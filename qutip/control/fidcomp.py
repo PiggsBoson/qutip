@@ -28,6 +28,7 @@ in the class descriptions.
 import timeit
 import warnings
 import numpy as np
+import scipy.linalg as la
 # QuTiP
 from qutip import Qobj
 from qutip import tensor
@@ -539,10 +540,10 @@ class FidCompUnitaryBipartite(FidelityComputer):
         self.id_text = 'BIPARTITE'
         self.scale_factor = None
         self.uses_onwd_evo = True
-        if not self.parent.prop_computer.grad_exact:
-            raise errors.UsageError(
-                "This FidelityComputer can only be"
-                " used with an exact gradient PropagatorComputer.")
+        # if not self.parent.prop_computer.grad_exact:
+        #     raise errors.UsageError(
+        #         "This FidelityComputer can only be"
+        #         " used with an exact gradient PropagatorComputer.")
         self.apply_params()
 
     def init_comp(self):
@@ -561,15 +562,24 @@ class FidCompUnitaryBipartite(FidelityComputer):
         dyn.compute_evolution()
         n_ts = dyn.num_tslots
         evo_final = dyn._fwd_evo[n_ts]
-        bath_dim = dyn.get_drift_dim()//dyn._target.dims[0]
-        target_expanded = tensor(dyn._target,identity(bath_dim))
-        self.Q = (target_expanded*evo_final).ptrace(list(range(1,1+np.floor(np.sqrt(bath_dim)))))
+        if dyn.oper_dtype == Qobj:
+            bath_dim = dyn.get_drift_dim()//dyn._target.dims[0]
+            target_expanded = tensor(dyn._target,identity(bath_dim))
+            self.Q = (target_expanded*evo_final).ptrace(list(range(1,1+np.floor(np.sqrt(bath_dim)))))
+        else:
+            sys_dim = dyn._target.shape[0]
+            bath_dim = dyn.get_drift_dim()//sys_dim
+            print(dyn.get_drift_dim(),sys_dim ,bath_dim)
+            target_expanded = np.kron(dyn._target, np.identity(bath_dim))
+            Q_tensor =np.matmul(target_expanded.conjugate().transpose(), evo_final).reshape([sys_dim, bath_dim, sys_dim, bath_dim])
+            self.Q = np.trace(Q_tensor, axis1=0, axis2=2)
         return self.Q
 
     def get_fid_err(self):
         """
         Gets the absolute error in the fidelity
         """
+        print(self.scale_factor)
         if not self.fidelity_current:
             dyn = self.parent
             dyn = self.parent
@@ -581,11 +591,11 @@ class FidCompUnitaryBipartite(FidelityComputer):
                            "fidelity...\n Target:\n{}\n Evo final:\n{}\n".format(dyn._target, evo_final))
 
             if dyn.oper_dtype == Qobj:
-                self.fid_err = 1- self.scale_factor*np.real(
-                        (Q.dag()*Q).sqrtm().tr())
+                self.fid_err = 1 - (self.scale_factor*np.absolute(
+                        (Q.dag()*Q).sqrtm().tr()))**2
             else:
-                self.fid_err = 1- self.scale_factor*np.real(_trace(
-                        Q.conj().T.dot(Q)))
+                self.fid_err = 1 - (self.scale_factor*np.absolute(_trace(
+                        la.sqrtm(Q.conj().T.dot(Q)))))**2
 
             if np.isnan(self.fid_err):
                 self.fid_err = np.Inf
@@ -596,7 +606,7 @@ class FidCompUnitaryBipartite(FidelityComputer):
             self.fidelity_current = True
             if self.log_level <= logging.DEBUG:
                 logger.debug("Fidelity error: {}".format(self.fid_err))
-
+        print(self.fid_err)
         return self.fid_err
 
     def get_fid_err_gradient(self):
@@ -650,10 +660,15 @@ class FidCompUnitaryBipartite(FidelityComputer):
         # loop through all ctrl timeslots calculating gradients
         time_st = timeit.default_timer()
 
-        evo_final = dyn._fwd_evo[n_ts]
-        bath_dim = dyn.get_drift_dim()//dyn._target.dims[0]
-        target_expanded = tensor(dyn._target,identity(bath_dim))
-        pre_factor = (Q.dag()*Q).sqrtm().inv()*Q.dag()
+        if dyn.oper_dtype == Qobj:
+            bath_dim = dyn.get_drift_dim()//dyn._target.dims[0]
+            target_expanded = tensor(dyn._target,identity(bath_dim))
+            pre_factor = (Q.dag()*Q).sqrtm().inv()*Q.dag()
+        else:
+            sys_dim = dyn._target.shape[0]
+            bath_dim = dyn.get_drift_dim()//sys_dim
+            target_expanded = np.kron(dyn._target, np.identity(bath_dim))
+            pre_factor = la.inv(la.sqrtm(Q.conjugate().transpose() @ Q))@Q.conjugate().transpose()
         for j in range(n_ctrls):
             for k in range(n_ts):
                 fwd_evo = dyn._fwd_evo[k]
@@ -667,7 +682,13 @@ class FidCompUnitaryBipartite(FidelityComputer):
                     g = -1*self.scale_factor*np.real(
                                     (pre_factor*Q_grad).tr())
                 else:
-                    raise NotImplementedError
+                    evo_grad = dyn._get_prop_grad(k, j)@fwd_evo
+                    if k+1 < n_ts:
+                        evo_grad = dyn._onwd_evo[k+1]@evo_grad
+                    Q_grad_tensor = (target_expanded@evo_grad).reshape([sys_dim, bath_dim, sys_dim, bath_dim])
+                    Q_grad = np.trace(Q_grad_tensor, axis1=0, axis2=2)
+
+                    g = -1*self.scale_factor*np.real(_trace(pre_factor@Q_grad))
                 if np.isnan(g):
                     g = np.Inf
 
@@ -756,7 +777,6 @@ class FidCompTraceDiff(FidelityComputer):
             self.fidelity_current = True
             if self.log_level <= logging.DEBUG:
                 logger.debug("Fidelity error: {}".format(self.fid_err))
-
         return self.fid_err
 
     def get_fid_err_gradient(self):
@@ -831,6 +851,7 @@ class FidCompTraceDiff(FidelityComputer):
         if dyn.stats is not None:
             dyn.stats.wall_time_gradient_compute += \
                 timeit.default_timer() - time_st
+        print(grad)
         return grad
 
 
