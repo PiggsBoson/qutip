@@ -1494,10 +1494,11 @@ class DynamicsUnitary(Dynamics):
         else:
             self.tslot_computer = tslotcomp.TSlotCompUpdateAll(self)
         # set the default fidelity computer
-        if self.fid_type == 'BIPARTITE':
-            self.fid_computer = fidcomp.FidCompUnitaryBipartite(self)
-        else:
-            self.fid_computer = fidcomp.FidCompUnitary(self)
+        self.fid_computer = fidcomp.FidCompUnitaryBipartite(self) #This is not a natural fidleity for unitary dynamics. just use this for bitpartite control
+        # if self.fid_type == 'BIPARTITE':
+        #     self.fid_computer = fidcomp.FidCompUnitaryBipartite(self)
+        # else:
+        #     self.fid_computer = fidcomp.FidCompUnitary(self)
         # set the default propagator computer
         self.prop_computer = propcomp.PropCompDiag(self)
 
